@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kairos — World Clock</title>
+<link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23ff6a2b'/%3E%3Ccircle cx='32' cy='32' r='22' fill='%23f3f2eb'/%3E%3Cline x1='32' y1='32' x2='32' y2='19' stroke='%23121212' stroke-width='5' stroke-linecap='round' transform='rotate(305 32 32)'/%3E%3Cline x1='32' y1='32' x2='32' y2='13' stroke='%23121212' stroke-width='3.5' stroke-linecap='round' transform='rotate(60 32 32)'/%3E%3Ccircle cx='32' cy='32' r='3' fill='%23ff6a2b'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Unbounded:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #e6e4dc;
+    --panel: #f3f2eb;
+    --chip: #e2e0d6;
+    --ink: #121212;
+    --muted: rgba(18, 18, 18, 0.5);
+    --line: rgba(18, 18, 18, 0.07);
+    --accent: #ff6a2b;
+    --shadow: 0 14px 30px rgba(0, 0, 0, 0.25);
+    --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a0b0e;
+    --panel: #15171c;
+    --chip: #232730;
+    --ink: #f4f1ea;
+    --muted: rgba(244, 241, 234, 0.5);
+    --line: rgba(244, 241, 234, 0.06);
+    --accent: #ff7a3d;
+    --shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+
+  body {
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--ink);
+    min-height: 100dvh; transition: background 0.3s ease, color 0.3s ease;
+  }
+
+  .app {
+    max-width: 1400px; margin: 0 auto; min-height: 100dvh;
+    padding: clamp(10px, 2vw, 28px);
+    display: flex; flex-direction: column;
+  }
+
+  /* ---------- Top bar ---------- */
+  .bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-bottom: 14px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 0.8rem; letter-spacing: 0.08em; white-space: nowrap; }
+  .logo .mark { width: 28px; height: 28px; display: block; flex: none; }
+  .logo .mark .arm-up { transform-origin: 11.5px 16px; transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .logo:hover .mark .arm-up { transform: rotate(-16deg); }
+  .logo span { letter-spacing: 0.22em; }
+  .seg { display: inline-flex; background: var(--chip); border-radius: 999px; padding: 3px; }
+  .seg button {
+    appearance: none; border: 0; background: transparent; color: var(--ink); cursor: pointer;
+    font: 600 0.74rem "Inter", sans-serif; padding: 7px 13px; border-radius: 999px; transition: background 0.2s, color 0.2s;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+  .search { position: relative; flex: 1; min-width: 180px; max-width: 380px; margin: 0 auto; }
+  .search svg { position: absolute; left: 14px; top: 50%; width: 15px; height: 15px; transform: translateY(-50%); stroke: var(--muted); fill: none; stroke-width: 2; stroke-linecap: round; pointer-events: none; }
+  .search input {
+    width: 100%; font: 500 0.82rem "Inter", sans-serif; color: var(--ink);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px 10px 38px; outline: none;
+  }
+  .search input:focus { border-color: var(--accent); }
+  .search input::placeholder { color: var(--muted); }
+  .results {
+    position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; right: 0; list-style: none;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .results li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px; font-size: 0.82rem; cursor: pointer; }
+  .results li small { color: var(--muted); font-size: 0.72rem; }
+  .results li:hover, .results li[aria-selected="true"] { background: var(--chip); }
+  .actions { display: flex; gap: 8px; }
+  .ib {
+    width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+    transition: transform 0.15s, border-color 0.2s;
+  }
+  .ib:hover { border-color: var(--accent); }
+  .ib:active { transform: scale(0.94); }
+  .ib svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .ib:focus-visible, .seg button:focus-visible, .city:focus-visible, .add:focus-visible, .rm:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ic-sun { display: none; }
+  :root[data-theme="dark"] .ic-sun { display: block; }
+  :root[data-theme="dark"] .ic-moon { display: none; }
+
+  /* ---------- Clock panel ---------- */
+  .panel {
+    position: relative; background-color: var(--panel);
+    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 56px 56px; background-position: center top;
+    border-radius: 28px 28px 0 0;
+    padding: clamp(34px, 5vw, 56px) clamp(12px, 3vw, 40px) 0;
+  }
+  .live { position: absolute; top: 16px; left: 20px; display: flex; align-items: center; gap: 8px; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: blink 2s ease-in-out infinite; }
+
+  .timewrap { position: relative; width: fit-content; margin: 0 auto; }
+  .time {
+    display: flex; justify-content: center; align-items: flex-end;
+    font-family: var(--display); font-weight: 800; line-height: 1;
+    font-size: clamp(2.8rem, min(14.5vw, 24vh), 13rem);
+  }
+  .unit { display: flex; flex-direction: column; align-items: center; }
+  .lab { font: 500 0.7rem "Inter", sans-serif; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.9rem; }
+  .pair { display: flex; }
+  .dg { display: inline-block; width: 0.82em; text-align: center; }
+  .dg.flip { animation: digitIn 0.38s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .unit.sec .dg { color: var(--accent); }
+  .colon { height: 1em; width: 0.34em; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0.17em; animation: pulse 1s ease-in-out infinite; }
+  .colon i { display: block; width: 0.1em; height: 0.1em; background: var(--ink); }
+  .ampm {
+    position: absolute; right: 0; top: -2rem; font: 700 0.72rem "Inter", sans-serif; letter-spacing: 0.1em;
+    padding: 5px 11px; border-radius: 999px; background: var(--ink); color: var(--panel);
+  }
+
+  .analog { width: min(68vw, 44vh, 420px); aspect-ratio: 1; margin: 0 auto; }
+  .analog svg { width: 100%; height: 100%; overflow: visible; }
+  .a-face { fill: var(--chip); stroke: var(--ink); stroke-width: 2.5; }
+  .a-tick { stroke: var(--muted); stroke-linecap: round; }
+  .a-tick.major { stroke: var(--ink); stroke-width: 2.4; }
+  .a-num { fill: var(--ink); font-family: var(--display); font-weight: 500; font-size: 12px; text-anchor: middle; dominant-baseline: central; }
+  .a-brand { fill: var(--muted); font: 600 5px "Inter", sans-serif; letter-spacing: 2px; text-anchor: middle; }
+  .a-win rect { fill: var(--panel); stroke: var(--line); stroke-width: 0.8; }
+  .a-win text { fill: var(--accent); font: 700 7px "Inter", sans-serif; text-anchor: middle; dominant-baseline: central; }
+  .hand { stroke-linecap: round; transform-origin: 100px 100px; }
+  .hand.h { stroke: var(--ink); stroke-width: 5.5; }
+  .hand.m { stroke: var(--ink); stroke-width: 3.5; }
+  .hand.s { stroke: var(--accent); stroke-width: 1.8; }
+  .hub { fill: var(--accent); }
+  .hub-in { fill: var(--panel); }
+
+  /* ---------- City strip ---------- */
+  .strip {
+    display: flex; gap: 8px; overflow-x: auto; padding: 22px 2px 16px;
+    margin-top: clamp(10px, 2.5vw, 30px);
+    scroll-snap-type: x proximity; scrollbar-width: none;
+  }
+  .strip::-webkit-scrollbar { display: none; }
+  .cw { position: relative; flex: 0 0 auto; scroll-snap-align: center; }
+  .city {
+    appearance: none; display: flex; flex-direction: column; gap: 5px; text-align: left; cursor: grab;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    width: clamp(116px, 11vw, 154px); min-height: 92px; padding: 12px 14px; border-radius: 16px;
+    background: transparent; border: 1px solid transparent; color: var(--ink); font: inherit;
+    transition: background 0.2s, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s;
+  }
+  .city:hover { background: var(--chip); }
+  .city[aria-pressed="true"] { background: var(--ink); color: var(--panel); transform: translateY(-12px); box-shadow: var(--shadow); }
+  .cn { font-size: 0.72rem; font-weight: 500; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ct { display: flex; align-items: baseline; gap: 5px; font-family: var(--display); font-weight: 700; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+  .ct small { font: 600 0.62rem "Inter", sans-serif; opacity: 0.6; letter-spacing: 0.06em; }
+  .cd { font-size: 0.66rem; opacity: 0.55; white-space: nowrap; }
+  .rm {
+    position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%; border: 0; cursor: pointer;
+    background: var(--chip); color: var(--ink); font-size: 0.8rem; line-height: 1; opacity: 0; transition: opacity 0.15s; display: grid; place-items: center;
+  }
+  .cw:hover .rm, .cw:focus-within .rm { opacity: 1; }
+  .add {
+    appearance: none; cursor: pointer; flex: 0 0 auto; width: 92px; min-height: 92px; border-radius: 16px; background: transparent;
+    border: 1px dashed var(--muted); color: var(--muted); font: 500 0.72rem "Inter", sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; align-self: stretch;
+  }
+  .add:hover { color: var(--ink); border-color: var(--ink); }
+  .add b { font-size: 1.3rem; font-weight: 400; line-height: 1; }
+
+  /* Drag to rearrange */
+  .strip.is-dragging { scroll-snap-type: none; user-select: none; -webkit-user-select: none; cursor: grabbing; }
+  .cw.dragging { z-index: 5; will-change: transform; }
+  .cw.dragging .city { cursor: grabbing; box-shadow: var(--shadow); background: var(--chip); }
+  .cw.dragging .city[aria-pressed="true"] { background: var(--ink); }
+  .cw.dragging .rm { opacity: 0; }
+
+  /* ---------- Scene ---------- */
+  .scene { position: relative; flex: 1 1 auto; min-height: clamp(240px, 36vh, 440px); border-radius: 0 0 28px 28px; overflow: hidden; background: #111; }
+  .scene > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .scene::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.5)); }
+  .where {
+    position: absolute; z-index: 2; left: clamp(16px, 3vw, 40px); bottom: clamp(16px, 3vw, 36px); right: 330px;
+    font-family: var(--display); font-weight: 800; text-transform: uppercase; color: #fff; line-height: 1.08;
+    font-size: clamp(1.3rem, 4vw, 3.3rem); text-shadow: 0 2px 24px rgba(0, 0, 0, 0.45);
+  }
+  .where span { display: block; }
+  .where span + span { font-size: 0.62em; font-weight: 700; opacity: 0.92; }
+  .datecard {
+    position: absolute; z-index: 2; right: clamp(12px, 2.5vw, 32px); bottom: clamp(12px, 2.5vw, 32px);
+    width: clamp(220px, 24vw, 300px); padding: 16px 18px; border-radius: 20px; color: #fff;
+    background: rgba(18, 20, 26, 0.42); border: 1px solid rgba(255, 255, 255, 0.18);
+    -webkit-backdrop-filter: blur(16px) saturate(130%); backdrop-filter: blur(16px) saturate(130%);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .dc-top { display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.85; }
+  .phase { padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); letter-spacing: 0.08em; font-weight: 600; }
+  .dc-date { font-family: var(--display); font-weight: 700; font-size: 1.15rem; line-height: 1.2; }
+  .dc-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 0.7rem; opacity: 0.75; }
+  .dc-bar { height: 3px; border-radius: 99px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
+  .dc-bar i { display: block; height: 100%; width: 100%; transform-origin: left; background: var(--accent); }
+
+  /* ---------- Fullscreen ---------- */
+  body.is-full .app { padding: 0; max-width: none; }
+  body.is-full .bar { position: absolute; z-index: 30; top: 0; left: 0; right: 0; padding: 14px 20px; opacity: 0; transition: opacity 0.35s; }
+  body.is-full .bar:hover, body.is-full .bar:focus-within { opacity: 1; }
+  body.is-full .panel, body.is-full .scene { border-radius: 0; }
+  body.is-full .time { font-size: clamp(3rem, min(16vw, 30vh), 22rem); }
+
+  @keyframes digitIn { from { opacity: 0.15; transform: translateY(-12%); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  @media (max-width: 760px) {
+    .where { right: 16px; bottom: 150px; }
+    .datecard { left: 12px; right: 12px; width: auto; }
+    .scene { min-height: 360px; }
+    .search { order: 5; flex-basis: 100%; max-width: none; }
+    .actions { margin-left: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .colon, .live i, .dg.flip { animation: none; }
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="logo" aria-label="Kairos">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="9" fill="var(--accent)"/>
+        <path d="M11.5 7v18" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        <path class="arm-up" d="M11.5 16L22 7" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        <path d="M11.5 16L21 24.5" fill="none" stroke="#121212" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="11.5" cy="16" r="2.6" fill="#121212" stroke="#fff" stroke-width="1.6"/>
+      </svg>
+      <span>KAIROS</span>
+    </div>
+    <div class="seg" role="group" aria-label="Time format">
+      <button type="button" id="f12" aria-pressed="false">12h</button>
+      <button type="button" id="f24" aria-pressed="true">24h</button>
+    </div>
+    <div class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="search" type="text" placeholder="Search for a timezone" autocomplete="off" spellcheck="false" aria-label="Search for a city to add" aria-controls="results">
+      <ul class="results" id="results" role="listbox" hidden></ul>
+    </div>
+    <div class="actions">
+      <button class="ib" id="viewBtn" type="button" title="Digital / analog (V)" aria-label="Switch digital or analog view">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </button>
+      <button class="ib" id="themeBtn" type="button" title="Light / dark (T)" aria-label="Toggle theme">
+        <svg class="ic-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="ic-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+      </button>
+      <button class="ib" id="fsBtn" type="button" title="Fullscreen (F)" aria-label="Toggle fullscreen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="panel" aria-label="Current time">
+    <div class="live"><i></i>Live</div>
+
+    <div class="timewrap" id="timeWrap">
+      <div class="time" role="timer" aria-live="off">
+        <div class="unit"><span class="lab">hours</span><span class="pair"><span class="dg" id="d0">0</span><span class="dg" id="d1">0</span></span></div>
+        <div class="colon" aria-hidden="true"><i></i><i></i></div>
+        <div class="unit"><span class="lab">minutes</span><span class="pair"><span class="dg" id="d2">0</span><span class="dg" id="d3">0</span></span></div>
+        <div class="colon" aria-hidden="true"><i></i><i></i></div>
+        <div class="unit sec"><span class="lab">seconds</span><span class="pair"><span class="dg" id="d4">0</span><span class="dg" id="d5">0</span></span></div>
+      </div>
+      <span class="ampm" id="ampm" hidden>AM</span>
+    </div>
+
+    <div class="analog" id="analog" hidden>
+      <svg viewBox="0 0 200 200" role="img" aria-label="Analog clock">
+        <circle class="a-face" cx="100" cy="100" r="96"/>
+        <g id="aTicks"></g>
+        <g id="aNums"></g>
+        <text class="a-brand" id="aBrand" x="100" y="70">CITY</text>
+        <g class="a-win"><rect x="79" y="127" width="42" height="17" rx="5"/><text id="aDate" x="100" y="135.5">—</text></g>
+        <line class="hand h" id="hHand" x1="100" y1="106" x2="100" y2="58"/>
+        <line class="hand m" id="mHand" x1="100" y1="108" x2="100" y2="32"/>
+        <line class="hand s" id="sHand" x1="100" y1="116" x2="100" y2="20"/>
+        <circle class="hub" cx="100" cy="100" r="5"/>
+        <circle class="hub-in" cx="100" cy="100" r="2"/>
+      </svg>
+    </div>
+
+    <div class="strip" id="strip" role="list" aria-label="Cities"></div>
+  </section>
+
+  <section class="scene" aria-label="Selected city">
+    <svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop id="skyTop" offset="0" stop-color="#4aa3f5"/><stop id="skyBot" offset="1" stop-color="#bfe3ff"/></linearGradient>
+        <radialGradient id="sunGlow"><stop offset="0" stop-color="#fff6d0" stop-opacity="0.95"/><stop offset="0.35" stop-color="#ffd27a" stop-opacity="0.45"/><stop offset="1" stop-color="#ffb066" stop-opacity="0"/></radialGradient>
+        <radialGradient id="moonGlow"><stop offset="0" stop-color="#dfe6ff" stop-opacity="0.55"/><stop offset="1" stop-color="#9fb2ff" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect width="1200" height="420" fill="url(#sky)"/>
+      <g id="stars"></g>
+      <g id="sunG"><circle r="160" fill="url(#sunGlow)"/><circle r="26" fill="#fff3c4"/></g>
+      <g id="moonG"><circle r="90" fill="url(#moonGlow)"/><circle r="20" fill="#eef2ff"/><circle cx="-6" cy="-4" r="4" fill="#d3d9f3"/><circle cx="6" cy="6" r="2.6" fill="#d3d9f3"/></g>
+      <path id="hillBack" d="M0 300 C150 230 300 265 450 240 S750 205 900 250 S1100 228 1200 262 L1200 420 L0 420Z"/>
+      <g id="skyline"></g>
+      <path id="hillMid" d="M0 345 C200 292 380 335 560 312 S900 282 1200 334 L1200 420 L0 420Z"/>
+      <path id="hillFront" d="M0 390 C250 352 450 404 700 378 S1050 352 1200 384 L1200 420 L0 420Z"/>
+    </svg>
+    <h1 class="where"><span id="wName">—</span><span id="wRegion"></span></h1>
+    <div class="datecard">
+      <div class="dc-top"><span id="dcDay">—</span><span class="phase" id="dcPhase">—</span></div>
+      <div class="dc-date" id="dcDate">—</div>
+      <div class="dc-meta"><span id="dcOff">GMT</span><span id="dcZone"></span></div>
+      <div class="dc-bar" aria-hidden="true"><i id="dcBar"></i></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const root = document.documentElement;
+  const pad = (n) => String(n).padStart(2, '0');
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const MON3 = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+  /* ---------- Data ---------- */
+  const CITIES = [
+    ['los-angeles','Los Angeles','California, USA','America/Los_Angeles'],
+    ['new-york','New York','New York, USA','America/New_York'],
+    ['chicago','Chicago','Illinois, USA','America/Chicago'],
+    ['denver','Denver','Colorado, USA','America/Denver'],
+    ['toronto','Toronto','Ontario, Canada','America/Toronto'],
+    ['mexico-city','Mexico City','Mexico','America/Mexico_City'],
+    ['sao-paulo','São Paulo','Brazil','America/Sao_Paulo'],
+    ['buenos-aires','Buenos Aires','Argentina','America/Argentina/Buenos_Aires'],
+    ['honolulu','Honolulu','Hawaii, USA','Pacific/Honolulu'],
+    ['anchorage','Anchorage','Alaska, USA','America/Anchorage'],
+    ['london','London','United Kingdom','Europe/London'],
+    ['dublin','Dublin','Ireland','Europe/Dublin'],
+    ['paris','Paris','France','Europe/Paris'],
+    ['berlin','Berlin','Germany','Europe/Berlin'],
+    ['madrid','Madrid','Spain','Europe/Madrid'],
+    ['rome','Rome','Italy','Europe/Rome'],
+    ['istanbul','Istanbul','Türkiye','Europe/Istanbul'],
+    ['moscow','Moscow','Russia','Europe/Moscow'],
+    ['cairo','Cairo','Egypt','Africa/Cairo'],
+    ['lagos','Lagos','Nigeria','Africa/Lagos'],
+    ['nairobi','Nairobi','Kenya','Africa/Nairobi'],
+    ['johannesburg','Johannesburg','South Africa','Africa/Johannesburg'],
+    ['dubai','Dubai','United Arab Emirates','Asia/Dubai'],
+    ['karachi','Karachi','Pakistan','Asia/Karachi'],
+    ['delhi','New Delhi','India','Asia/Kolkata'],
+    ['dhaka','Dhaka','Bangladesh','Asia/Dhaka'],
+    ['bangkok','Bangkok','Thailand','Asia/Bangkok'],
+    ['singapore','Singapore','Singapore','Asia/Singapore'],
+    ['kuala-lumpur','Kuala Lumpur','Malaysia','Asia/Kuala_Lumpur'],
+    ['jakarta','Jakarta','Indonesia','Asia/Jakarta'],
+    ['hong-kong','Hong Kong','China','Asia/Hong_Kong'],
+    ['shanghai','Shanghai','China','Asia/Shanghai'],
+    ['seoul','Seoul','South Korea','Asia/Seoul'],
+    ['tokyo','Tokyo','Japan','Asia/Tokyo'],
+    ['sydney','Sydney','Australia','Australia/Sydney'],
+    ['auckland','Auckland','New Zealand','Pacific/Auckland'],
+  ].map(([id, name, region, tz]) => ({ id, name, region, tz }));
+  const byId = Object.fromEntries(CITIES.map((c) => [c.id, c]));
+
+  let LOCAL_TZ = 'UTC';
+  try { LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { /* keep UTC */ }
+  const LOCAL = {
+    id: 'local',
+    name: LOCAL_TZ.split('/').pop().replace(/_/g, ' '),
+    region: LOCAL_TZ.includes('/') ? LOCAL_TZ.split('/')[0].replace(/_/g, ' ') : 'Local time',
+    tz: LOCAL_TZ,
+  };
+  const getCity = (id) => (id === 'local' ? LOCAL : byId[id]);
+  const MAX_CITIES = 12;
+
+  /* ---------- State ---------- */
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
+  };
+  let ids = null;
+  try { ids = JSON.parse(store.get('wt.cities', 'null')); } catch { ids = null; }
+  if (!Array.isArray(ids)) ids = ['local', 'los-angeles', 'new-york', 'london', 'paris', 'dubai', 'tokyo', 'sydney'];
+  ids = [...new Set(ids)].filter((id) => getCity(id));
+  if (!ids.includes('local')) ids.unshift('local');
+
+  const state = {
+    ids,
+    sel: store.get('wt.sel', 'local'),
+    hour12: store.get('wt.h12', 'false') === 'true',
+    view: store.get('wt.view', 'digital'),
+    theme: store.get('wt.theme', 'light'),
+  };
+  if (!state.ids.includes(state.sel)) state.sel = 'local';
+  const save = () => {
+    store.set('wt.cities', JSON.stringify(state.ids));
+    store.set('wt.sel', state.sel);
+    store.set('wt.h12', String(state.hour12));
+    store.set('wt.view', state.view);
+    store.set('wt.theme', state.theme);
+  };
+
+  /* ---------- Time helpers ---------- */
+  const fmtCache = {};
+  function zoned(tz, now) {
+    let f = fmtCache[tz];
+    if (!f) {
+      f = fmtCache[tz] = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz, hourCycle: 'h23', weekday: 'long',
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', minute: 'numeric', second: 'numeric',
+      });
+    }
+    const o = {};
+    for (const p of f.formatToParts(now)) o[p.type] = p.value;
+    const y = +o.year, mo = +o.month, d = +o.day, h = (+o.hour) % 24, mi = +o.minute, s = +o.second;
+    const base = Math.floor(now.getTime() / 1000) * 1000;
+    const off = Math.round((Date.UTC(y, mo - 1, d, h, mi, s) - base) / 60000);
+    return { y, mo, d, h, mi, s, wd: o.weekday, off, key: y * 10000 + mo * 100 + d };
+  }
+  function fmtOffset(min) {
+    const sign = min < 0 ? '−' : '+', a = Math.abs(min);
+    return `GMT${sign}${Math.floor(a / 60)}${a % 60 ? ':' + pad(a % 60) : ''}`;
+  }
+  function rel(key, lkey) { return key > lkey ? 'Tomorrow' : key < lkey ? 'Yesterday' : 'Today'; }
+  function clock(z) {
+    if (!state.hour12) return { hh: pad(z.h), mm: pad(z.mi), ss: pad(z.s), ap: '' };
+    return { hh: pad(z.h % 12 || 12), mm: pad(z.mi), ss: pad(z.s), ap: z.h >= 12 ? 'PM' : 'AM' };
+  }
+  function phaseOf(h) {
+    if (h < 5) return 'Night';
+    if (h < 7) return 'Dawn';
+    if (h < 12) return 'Morning';
+    if (h < 17) return 'Afternoon';
+    if (h < 20) return 'Evening';
+    return 'Night';
+  }
+
+  /* ---------- Elements ---------- */
+  const el = {
+    f12: $('f12'), f24: $('f24'), search: $('search'), results: $('results'),
+    viewBtn: $('viewBtn'), themeBtn: $('themeBtn'), fsBtn: $('fsBtn'),
+    timeWrap: $('timeWrap'), ampm: $('ampm'), analog: $('analog'), strip: $('strip'),
+    hHand: $('hHand'), mHand: $('mHand'), sHand: $('sHand'), aTicks: $('aTicks'), aNums: $('aNums'),
+    aBrand: $('aBrand'), aDate: $('aDate'),
+    wName: $('wName'), wRegion: $('wRegion'),
+    dcDay: $('dcDay'), dcPhase: $('dcPhase'), dcDate: $('dcDate'), dcOff: $('dcOff'), dcZone: $('dcZone'), dcBar: $('dcBar'),
+    skyTop: $('skyTop'), skyBot: $('skyBot'), stars: $('stars'), sunG: $('sunG'), moonG: $('moonG'),
+    hillBack: $('hillBack'), hillMid: $('hillMid'), hillFront: $('hillFront'), skyline: $('skyline'),
+  };
+  const digits = [0, 1, 2, 3, 4, 5].map((i) => $('d' + i));
+
+  function setDigit(i, v) {
+    const d = digits[i];
+    if (d.textContent === v) return;
+    d.textContent = v;
+    d.classList.remove('flip'); void d.offsetWidth; d.classList.add('flip');
+  }
+  function setT(node, val) { if (node.__v !== val) { node.__v = val; node.textContent = val; } }
+
+  /* ---------- Scene (sky follows the city's local time) ---------- */
+  const KF = [
+    [0,    '#070b1f', '#18204a', '#0c1022'],
+    [5,    '#1a1f4d', '#5b3f7a', '#171326'],
+    [6.5,  '#4b5fa8', '#ffb48a', '#3a2b3f'],
+    [9,    '#4aa3f5', '#bfe3ff', '#3b4a3a'],
+    [13,   '#2f8cf0', '#a8dcff', '#46603f'],
+    [17,   '#4a86d8', '#ffd2a0', '#5a4a3a'],
+    [19,   '#3b2c70', '#ff8a6a', '#2d2238'],
+    [21,   '#101540', '#2a2f6a', '#12122a'],
+    [24,   '#070b1f', '#18204a', '#0c1022'],
+  ];
+  const hex2rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const rgb2hex = (c) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const mix = (a, b, t) => rgb2hex(hex2rgb(a).map((v, i) => lerp(v, hex2rgb(b)[i], t)));
+  function skyAt(h) {
+    let i = 0;
+    while (i < KF.length - 2 && h >= KF[i + 1][0]) i++;
+    const [h0, ...c0] = KF[i], [h1, ...c1] = KF[i + 1];
+    const t = Math.min(1, Math.max(0, (h - h0) / (h1 - h0)));
+    return c0.map((c, k) => mix(c, c1[k], t));
+  }
+  function nightFactor(h) {
+    if (h >= 20 || h < 5) return 1;
+    if (h < 7) return (7 - h) / 2;
+    if (h >= 18) return (h - 18) / 2;
+    return 0;
+  }
+  function rng(seed) {
+    return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  const NS = 'http://www.w3.org/2000/svg';
+  function buildScene() {
+    const r = rng(7);
+    for (let i = 0; i < 70; i++) {
+      const c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', (r() * 1200).toFixed(1)); c.setAttribute('cy', (r() * 230).toFixed(1));
+      c.setAttribute('r', (0.6 + r() * 1.1).toFixed(2)); c.setAttribute('fill', '#fff');
+      c.setAttribute('opacity', (0.4 + r() * 0.6).toFixed(2));
+      el.stars.appendChild(c);
+    }
+    for (let i = 0; i < 24; i++) {
+      const w = 14 + r() * 10, h = 26 + r() * 90, x = 560 + i * 21 + r() * 4;
+      const b = document.createElementNS(NS, 'rect');
+      b.setAttribute('x', x.toFixed(1)); b.setAttribute('y', (345 - h).toFixed(1));
+      b.setAttribute('width', w.toFixed(1)); b.setAttribute('height', (h + 80).toFixed(1));
+      el.skyline.appendChild(b);
+    }
+  }
+  function updateScene(h) {
+    const [top, bot, ground] = skyAt(h);
+    el.skyTop.setAttribute('stop-color', top); el.skyBot.setAttribute('stop-color', bot);
+    const back = mix(ground, bot, 0.5);
+    el.hillBack.setAttribute('fill', back);
+    el.hillMid.setAttribute('fill', mix(ground, bot, 0.22));
+    el.hillFront.setAttribute('fill', ground);
+    el.skyline.setAttribute('fill', mix(back, ground, 0.55));
+    el.stars.setAttribute('opacity', nightFactor(h).toFixed(2));
+
+    const st = (h - 6) / 12;                                   // sun 06:00 → 18:00
+    const sunOp = h < 5.5 || h > 18.5 ? 0 : Math.min(1, h - 5.5, 18.5 - h);
+    el.sunG.setAttribute('transform', `translate(${100 + st * 1000} ${318 - Math.sin(Math.max(0, Math.min(1, st)) * Math.PI) * 250})`);
+    el.sunG.setAttribute('opacity', Math.max(0, sunOp).toFixed(2));
+
+    const mt = (h >= 18 ? h - 18 : h + 6) / 12;                // moon 18:00 → 06:00
+    const moonOp = h >= 17.5 ? Math.min(1, h - 17.5) : h < 6.5 ? Math.min(1, 6.5 - h) : 0;
+    el.moonG.setAttribute('transform', `translate(${100 + mt * 1000} ${318 - Math.sin(Math.max(0, Math.min(1, mt)) * Math.PI) * 250})`);
+    el.moonG.setAttribute('opacity', Math.max(0, moonOp).toFixed(2));
+  }
+
+  /* ---------- Analog dial ---------- */
+  function buildDial() {
+    for (let i = 0; i < 60; i++) {
+      const major = i % 5 === 0, a = (i * 6 * Math.PI) / 180, r1 = 90, r2 = major ? 80 : 85;
+      const l = document.createElementNS(NS, 'line');
+      l.setAttribute('class', 'a-tick' + (major ? ' major' : ''));
+      l.setAttribute('x1', 100 + Math.sin(a) * r1); l.setAttribute('y1', 100 - Math.cos(a) * r1);
+      l.setAttribute('x2', 100 + Math.sin(a) * r2); l.setAttribute('y2', 100 - Math.cos(a) * r2);
+      l.setAttribute('stroke-width', major ? 2.4 : 1);
+      el.aTicks.appendChild(l);
+    }
+    for (let n = 1; n <= 12; n++) {
+      const a = (n * 30 * Math.PI) / 180, t = document.createElementNS(NS, 'text');
+      t.setAttribute('class', 'a-num');
+      t.setAttribute('x', 100 + Math.sin(a) * 66); t.setAttribute('y', 100 - Math.cos(a) * 66);
+      t.textContent = n; el.aNums.appendChild(t);
+    }
+  }
+  let selOff = 0;
+  function frame() {
+    const t = new Date(Date.now() + selOff * 60000);            // shifted so UTC getters read city time
+    const s = t.getUTCSeconds() + t.getUTCMilliseconds() / 1000;
+    const m = t.getUTCMinutes() + s / 60;
+    const h = (t.getUTCHours() % 12) + m / 60;
+    el.sHand.style.transform = `rotate(${s * 6}deg)`;
+    el.mHand.style.transform = `rotate(${m * 6}deg)`;
+    el.hHand.style.transform = `rotate(${h * 30}deg)`;
+    rafId = requestAnimationFrame(frame);
+  }
+
+  /* ---------- City strip ---------- */
+  let refs = {};
+  function buildStrip() {
+    el.strip.textContent = '';
+    refs = {};
+    for (const id of state.ids) {
+      const c = getCity(id);
+      const wrap = document.createElement('div'); wrap.className = 'cw'; wrap.setAttribute('role', 'listitem'); wrap.dataset.id = id;
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'city'; b.dataset.id = id;
+      b.title = 'Drag to reorder · Shift + ← / →';
+      b.setAttribute('aria-pressed', String(id === state.sel));
+      const n = document.createElement('span'); n.className = 'cn'; n.textContent = id === 'local' ? `${c.name} · You` : c.name;
+      const t = document.createElement('span'); t.className = 'ct';
+      const tb = document.createElement('b'); const ta = document.createElement('small');
+      t.append(tb, ta);
+      const m = document.createElement('span'); m.className = 'cd';
+      b.append(n, t, m); wrap.appendChild(b);
+      if (id !== 'local') {
+        const x = document.createElement('button');
+        x.type = 'button'; x.className = 'rm'; x.dataset.rm = id; x.setAttribute('aria-label', `Remove ${c.name}`); x.textContent = '×';
+        wrap.appendChild(x);
+      }
+      el.strip.appendChild(wrap);
+      refs[id] = { t: tb, ap: ta, meta: m };
+    }
+    const add = document.createElement('button');
+    add.type = 'button'; add.className = 'add'; add.id = 'addBtn';
+    add.innerHTML = '<b>+</b><span>Add city</span>';
+    el.strip.appendChild(add);
+  }
+
+  /* ---------- Rendering ---------- */
+  const favLink = $('favicon');
+  function setFavicon(z) {                                       // tab icon shows the selected city's time
+    if (!favLink) return;
+    const hDeg = ((z.h % 12) + z.mi / 60) * 30, mDeg = z.mi * 6;
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
+      `<rect width="64" height="64" rx="16" fill="#ff6a2b"/><circle cx="32" cy="32" r="22" fill="#f3f2eb"/>` +
+      `<line x1="32" y1="32" x2="32" y2="19" stroke="#121212" stroke-width="5" stroke-linecap="round" transform="rotate(${hDeg} 32 32)"/>` +
+      `<line x1="32" y1="32" x2="32" y2="13" stroke="#121212" stroke-width="3.5" stroke-linecap="round" transform="rotate(${mDeg} 32 32)"/>` +
+      `<circle cx="32" cy="32" r="3" fill="#ff6a2b"/></svg>`;
+    favLink.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  }
+  let lastKey = '';
+  function updateMeta(z, c) {
+    const t = clock(z);
+    el.wName.textContent = c.name.toUpperCase() + ',';
+    el.wRegion.textContent = c.region.toUpperCase();
+    el.dcDay.textContent = z.wd;
+    el.dcPhase.textContent = phaseOf(z.h);
+    el.dcDate.textContent = `${MONTHS[z.mo - 1]} ${z.d}, ${z.y}`;
+    el.dcOff.textContent = fmtOffset(z.off);
+    el.dcZone.textContent = c.tz.replace(/_/g, ' ');
+    el.dcBar.style.transform = `scaleX(${(z.h * 60 + z.mi) / 1440})`;
+    el.aBrand.textContent = c.name.toUpperCase();
+    el.aDate.textContent = `${MON3[z.mo - 1]} ${z.d}`;
+    updateScene(z.h + z.mi / 60);
+    document.title = `${t.hh}:${t.mm}${t.ap ? ' ' + t.ap : ''} · ${c.name} — Kairos`;
+    setFavicon(z);
+  }
+
+  function renderFrame(now) {
+    const lz = zoned(LOCAL_TZ, now);
+    let sz = lz;
+    for (const id of state.ids) {
+      const c = getCity(id);
+      const z = id === 'local' ? lz : zoned(c.tz, now);
+      const r = refs[id];
+      if (r) {
+        const t = clock(z);
+        setT(r.t, `${t.hh}:${t.mm}`);
+        setT(r.ap, t.ap);
+        setT(r.meta, `${fmtOffset(z.off)} · ${rel(z.key, lz.key)}`);
+      }
+      if (id === state.sel) sz = z;
+    }
+    const sc = getCity(state.sel);
+    selOff = sz.off;
+    const t = clock(sz);
+    setDigit(0, t.hh[0]); setDigit(1, t.hh[1]);
+    setDigit(2, t.mm[0]); setDigit(3, t.mm[1]);
+    setDigit(4, t.ss[0]); setDigit(5, t.ss[1]);
+    el.ampm.hidden = !state.hour12;
+    if (state.hour12) el.ampm.textContent = t.ap;
+
+    const key = [sc.id, sz.key, sz.h, sz.mi, state.hour12].join('|');
+    if (key !== lastKey) { lastKey = key; updateMeta(sz, sc); }
+  }
+
+  /* ---------- Loops ---------- */
+  let timeoutId = null, rafId = null;
+  function tick() {
+    const now = new Date();
+    renderFrame(now);
+    timeoutId = setTimeout(tick, 1000 - now.getMilliseconds() + 5);
+  }
+  function stopLoops() {
+    if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+  }
+  function startLoops() {
+    stopLoops();
+    tick();
+    if (state.view === 'analog') frame();
+  }
+
+  /* ---------- Actions ---------- */
+  function applyFormat() {
+    el.f12.setAttribute('aria-pressed', String(state.hour12));
+    el.f24.setAttribute('aria-pressed', String(!state.hour12));
+    lastKey = ''; save();
+    renderFrame(new Date());
+  }
+  function applyView() {
+    const analog = state.view === 'analog';
+    el.timeWrap.hidden = analog;
+    el.analog.hidden = !analog;
+    save();
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+    if (analog && !document.hidden) frame();
+  }
+  function applyTheme() { root.setAttribute('data-theme', state.theme); save(); }
+
+  function select(id, scroll) {
+    if (!getCity(id)) return;
+    state.sel = id; lastKey = ''; save();
+    el.strip.querySelectorAll('.city').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === id)));
+    renderFrame(new Date());
+    if (scroll) {
+      const b = el.strip.querySelector(`.city[data-id="${id}"]`);
+      if (b) b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    }
+  }
+  function addCity(id) {
+    if (state.ids.includes(id)) { select(id, true); return; }
+    if (state.ids.length >= MAX_CITIES) { el.search.value = ''; el.search.placeholder = `Up to ${MAX_CITIES} cities — remove one first`; return; }
+    state.ids.push(id); buildStrip(); select(id, true);
+  }
+  function removeCity(id) {
+    state.ids = state.ids.filter((x) => x !== id);
+    if (state.sel === id) state.sel = 'local';
+    buildStrip(); lastKey = ''; save(); renderFrame(new Date());
+  }
+
+  el.strip.addEventListener('click', (e) => {
+    if (suppressClick) { e.preventDefault(); return; }          // a drag just ended; don't treat it as a tap
+    const rm = e.target.closest('[data-rm]');
+    if (rm) { removeCity(rm.dataset.rm); return; }
+    const add = e.target.closest('.add');
+    if (add) { el.search.focus(); return; }
+    const b = e.target.closest('.city');
+    if (b) select(b.dataset.id, true);
+  });
+
+  /* Drag to rearrange (mouse: drag; touch: press & hold; keyboard: Shift + arrows) */
+  let suppressClick = false;
+  let drag = null;   // { wrap, pid, type, startX, startY, grab, active, timer, lastX, lastSwap, raf, scroll }
+  const stripWraps = () => [...el.strip.querySelectorAll('.cw')];
+  const commitOrder = () => { state.ids = stripWraps().map((w) => w.dataset.id); save(); };
+
+  function detachDragListeners() {
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', onDragEnd);
+    window.removeEventListener('pointercancel', onDragEnd);
+  }
+
+  el.strip.addEventListener('pointerdown', (e) => {
+    if (drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (e.target.closest('.rm')) return;
+    const wrap = e.target.closest('.cw');
+    if (!wrap) return;
+    drag = {
+      wrap, pid: e.pointerId, type: e.pointerType, startX: e.clientX, startY: e.clientY,
+      grab: e.clientX - wrap.getBoundingClientRect().left,
+      active: false, timer: null, lastX: e.clientX, lastSwap: 0, raf: null, scroll: el.strip.scrollLeft,
+    };
+    if (e.pointerType !== 'mouse') drag.timer = setTimeout(beginDrag, 300);   // long-press so scrolling still works
+    window.addEventListener('pointermove', onDragMove);
+    window.addEventListener('pointerup', onDragEnd);
+    window.addEventListener('pointercancel', onDragEnd);
+  });
+
+  function beginDrag() {
+    if (!drag || drag.active) return;
+    clearTimeout(drag.timer);
+    drag.active = true;
+    drag.wrap.style.transition = 'none';
+    drag.wrap.classList.add('dragging');
+    el.strip.classList.add('is-dragging');
+    if (navigator.vibrate) { try { navigator.vibrate(10); } catch { /* ignore */ } }
+    drag.raf = requestAnimationFrame(autoScroll);
+    updateDrag();
+  }
+
+  function onDragMove(e) {
+    if (!drag || e.pointerId !== drag.pid) return;
+    drag.lastX = e.clientX;
+    if (!drag.active) {
+      const dx = Math.abs(e.clientX - drag.startX), dy = Math.abs(e.clientY - drag.startY);
+      if (drag.type === 'mouse') { if (dx > 5) beginDrag(); }
+      else if (dx > 8 || dy > 8) { clearTimeout(drag.timer); drag = null; detachDragListeners(); }  // user is scrolling
+      return;
+    }
+    updateDrag();
+  }
+
+  function updateDrag() {
+    const wrap = drag.wrap;
+    const center = drag.lastX - drag.grab + wrap.offsetWidth / 2;
+    const now = performance.now();
+    if (now - drag.lastSwap > 160) {
+      const others = stripWraps().filter((o) => o !== wrap);
+      const newIdx = others.filter((o) => { const r = o.getBoundingClientRect(); return r.left + r.width / 2 < center; }).length;
+      const curIdx = others.filter((o) => o.compareDocumentPosition(wrap) & Node.DOCUMENT_POSITION_FOLLOWING).length;
+      if (newIdx !== curIdx) {
+        const before = new Map(others.map((o) => [o, o.getBoundingClientRect().left]));
+        el.strip.insertBefore(wrap, others[newIdx] || el.strip.querySelector('.add'));
+        others.forEach((o) => {                                  // FLIP: glide neighbours into their new slots
+          const d = before.get(o) - o.getBoundingClientRect().left;
+          if (!d) return;
+          o.style.transition = 'none'; o.style.transform = `translateX(${d}px)`;
+          void o.offsetWidth;
+          o.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)'; o.style.transform = '';
+        });
+        drag.lastSwap = now;
+      }
+    }
+    wrap.style.transform = 'none';
+    const natural = wrap.getBoundingClientRect().left;
+    wrap.style.transform = `translateX(${drag.lastX - drag.grab - natural}px) scale(1.04)`;
+  }
+
+  function autoScroll() {                                        // scroll the strip when held near an edge
+    if (!drag || !drag.active) return;
+    const r = el.strip.getBoundingClientRect(), edge = 56;
+    if (drag.lastX < r.left + edge) el.strip.scrollLeft -= 10;
+    else if (drag.lastX > r.right - edge) el.strip.scrollLeft += 10;
+    if (el.strip.scrollLeft !== drag.scroll) { drag.scroll = el.strip.scrollLeft; updateDrag(); }
+    drag.raf = requestAnimationFrame(autoScroll);
+  }
+
+  function onDragEnd(e) {
+    if (!drag || e.pointerId !== drag.pid) return;
+    const d = drag;
+    drag = null;
+    detachDragListeners();
+    clearTimeout(d.timer);
+    if (!d.active) return;                                       // just a tap; the click handler selects it
+    cancelAnimationFrame(d.raf);
+    suppressClick = true; setTimeout(() => { suppressClick = false; }, 60);
+    d.wrap.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)';
+    d.wrap.style.transform = '';
+    el.strip.classList.remove('is-dragging');
+    setTimeout(() => {
+      if (drag && drag.wrap === d.wrap) return;
+      d.wrap.classList.remove('dragging'); d.wrap.style.transition = '';
+    }, 220);
+    commitOrder();
+  }
+
+  el.strip.addEventListener('touchmove', (e) => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
+  el.strip.addEventListener('contextmenu', (e) => { if (drag) e.preventDefault(); });
+
+  el.strip.addEventListener('keydown', (e) => {
+    if (!e.shiftKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    const b = e.target.closest('.city');
+    if (!b) return;
+    e.preventDefault();
+    const wrap = b.closest('.cw');
+    const sib = e.key === 'ArrowLeft' ? wrap.previousElementSibling : wrap.nextElementSibling;
+    if (!sib || !sib.classList.contains('cw')) return;
+    if (e.key === 'ArrowLeft') el.strip.insertBefore(wrap, sib); else el.strip.insertBefore(sib, wrap);
+    b.focus();
+    b.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    commitOrder();
+  });
+
+  /* Search / add city */
+  let hits = [], active = -1;
+  function drawResults() {
+    const q = el.search.value.trim().toLowerCase();
+    hits = CITIES.filter((c) => !state.ids.includes(c.id) && (!q || `${c.name} ${c.region} ${c.tz}`.toLowerCase().includes(q))).slice(0, 7);
+    active = hits.length ? 0 : -1;
+    el.results.textContent = '';
+    const now = new Date();
+    hits.forEach((c, i) => {
+      const li = document.createElement('li'); li.setAttribute('role', 'option'); li.dataset.id = c.id;
+      li.setAttribute('aria-selected', String(i === active));
+      const a = document.createElement('span'); a.textContent = c.name;
+      const s = document.createElement('small'); s.textContent = `${c.region} · ${fmtOffset(zoned(c.tz, now).off)}`;
+      li.append(a, s); el.results.appendChild(li);
+    });
+    el.results.hidden = !hits.length;
+  }
+  function closeResults() { el.results.hidden = true; }
+  function markActive() {
+    [...el.results.children].forEach((li, i) => li.setAttribute('aria-selected', String(i === active)));
+  }
+  el.search.addEventListener('input', drawResults);
+  el.search.addEventListener('focus', drawResults);
+  el.search.addEventListener('blur', closeResults);
+  el.search.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (hits.length) { active = (active + 1) % hits.length; markActive(); } }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (hits.length) { active = (active - 1 + hits.length) % hits.length; markActive(); } }
+    else if (e.key === 'Enter') { if (hits[active]) { addCity(hits[active].id); el.search.value = ''; closeResults(); el.search.blur(); } }
+    else if (e.key === 'Escape') { el.search.blur(); }
+  });
+  el.results.addEventListener('mousedown', (e) => {
+    e.preventDefault();                                           // keep focus until we're done
+    const li = e.target.closest('li');
+    if (li) { addCity(li.dataset.id); el.search.value = ''; closeResults(); el.search.blur(); }
+  });
+
+  /* Fullscreen */
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  function toggleFullscreen() {
+    if (fsEl()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+    const d = document.documentElement, req = d.requestFullscreen || d.webkitRequestFullscreen;
+    if (req) { const p = req.call(d); if (p && p.catch) p.catch(() => {}); }
+  }
+  function onFs() { document.body.classList.toggle('is-full', !!fsEl()); }
+  if (!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)) el.fsBtn.hidden = true;
+  document.addEventListener('fullscreenchange', onFs);
+  document.addEventListener('webkitfullscreenchange', onFs);
+
+  /* Buttons + keys */
+  const setFmt = (v) => { state.hour12 = v; applyFormat(); };
+  const toggleView = () => { state.view = state.view === 'digital' ? 'analog' : 'digital'; applyView(); };
+  const toggleTheme = () => { state.theme = state.theme === 'dark' ? 'light' : 'dark'; applyTheme(); };
+  el.f12.addEventListener('click', () => setFmt(true));
+  el.f24.addEventListener('click', () => setFmt(false));
+  el.viewBtn.addEventListener('click', toggleView);
+  el.themeBtn.addEventListener('click', toggleTheme);
+  el.fsBtn.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target instanceof HTMLInputElement) return;
+    switch (e.key.toLowerCase()) {
+      case 'h': setFmt(!state.hour12); break;
+      case 'v': toggleView(); break;
+      case 't': toggleTheme(); break;
+      case 'f': toggleFullscreen(); break;
+      case '/': e.preventDefault(); el.search.focus(); break;
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopLoops(); else startLoops(); });
+  window.addEventListener('pagehide', stopLoops);
+
+  /* ---------- Init ---------- */
+  buildScene();
+  buildDial();
+  buildStrip();
+  applyTheme();
+  applyFormat();
+  applyView();
+  startLoops();
+})();
+</script>
+</body>
+</html>
